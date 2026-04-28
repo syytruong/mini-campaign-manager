@@ -68,9 +68,12 @@ src/
 │   ├── EmptyState.tsx      # reusable empty placeholder
 │   ├── ErrorAlert.tsx      # reusable Chakra Alert renderer for ApiError
 │   └── StatusBadge.tsx     # color-mapped Badge for CampaignStatus
-└── pages/
-    ├── LoginPage.tsx       # /login (sign-in + register tabs)
-    └── CampaignsPage.tsx   # /campaigns (list with filter + pagination)
+├── pages/
+│   ├── LoginPage.tsx       # /login (sign-in + register tabs)
+│   ├── CampaignsPage.tsx   # /campaigns (list with filter + pagination)
+│   └── NewCampaignPage.tsx # /campaigns/new (create form)
+└── utils/
+    └── parseEmails.ts      # textarea -> {valid, invalid} email arrays
 ```
 
 ## Routes
@@ -79,6 +82,7 @@ src/
 |------------------|------|-------------------------------------------|
 | `/login`         | -    | Sign in or create an account              |
 | `/campaigns`     | JWT  | List campaigns with status filter         |
+| `/campaigns/new` | JWT  | Create a draft campaign                   |
 
 URL search params on `/campaigns`:
 - `?status=` — `draft|scheduled|sending|sent` to filter
