@@ -8,6 +8,7 @@ interface AppConfig {
   nodeEnv: 'development' | 'production' | 'test';
   port: number;
   databaseUrl: string;
+  corsOrigins: string[];
 }
 
 function required(name: string): string {
@@ -18,8 +19,21 @@ function required(name: string): string {
   return value;
 }
 
+function parseCorsOrigins(): string[] {
+  const raw = process.env.CORS_ORIGINS;
+  if (raw && raw.trim().length > 0) {
+    return raw
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+  // Sensible default for local dev: Vite default port
+  return ['http://localhost:5173'];
+}
+
 export const config: AppConfig = {
   nodeEnv: (process.env.NODE_ENV as AppConfig['nodeEnv']) || 'development',
   port: Number(process.env.API_PORT) || 4000,
   databaseUrl: required('DATABASE_URL'),
+  corsOrigins: parseCorsOrigins(),
 };
