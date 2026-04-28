@@ -26,6 +26,9 @@ Loaded from the monorepo root `.env`:
 - `VITE_API_URL` — backend base URL (default `http://localhost:4000`)
 - `WEB_PORT` — vite dev server port (default `5173`)
 
+Only variables prefixed `VITE_` are exposed to the browser bundle. See the
+[Vite env docs](https://vite.dev/guide/env-and-mode) for details.
+
 ## Structure
 
 ```
