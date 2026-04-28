@@ -204,7 +204,7 @@ export const campaignService = {
 
   async schedule(id: string, userId: string, scheduledAt: Date): Promise<Campaign> {
     if (scheduledAt.getTime() < Date.now() - 1000) {
-      throw Errors.badRequest('scheduledAt must be a future timestamp');
+      throw Errors.badRequest('Schedule must be in future');
     }
 
     return sequelize.transaction(async (tx) => {
