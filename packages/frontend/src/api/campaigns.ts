@@ -80,3 +80,23 @@ export function useCampaignsList(params: ListCampaignsParams) {
     placeholderData: keepPreviousData,
   });
 }
+
+export function useCampaign(id: string | undefined) {
+  return useQuery({
+    queryKey: campaignKeys.detail(id ?? ''),
+    queryFn: () => campaignsApi.get(id!),
+    enabled: Boolean(id),
+    // Refetch every 2s while the send simulation is running so the body
+    // (and especially the status) stays live; off otherwise.
+    refetchInterval: (q) => (q.state.data?.status === 'sending' ? 2000 : false),
+  });
+}
+
+export function useCampaignStats(id: string | undefined, currentStatus?: CampaignStatus) {
+  return useQuery({
+    queryKey: campaignKeys.stats(id ?? ''),
+    queryFn: () => campaignsApi.stats(id!),
+    enabled: Boolean(id),
+    refetchInterval: currentStatus === 'sending' ? 2000 : false,
+  });
+}
