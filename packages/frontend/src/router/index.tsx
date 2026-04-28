@@ -1,0 +1,28 @@
+import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { AppLayout } from '../components/AppLayout';
+import { CampaignsPage } from '../pages/CampaignsPage';
+import { LoginPage } from '../pages/LoginPage';
+import { RequireAuth } from './RequireAuth';
+
+export const router = createBrowserRouter([
+  {
+    path: '/login',
+    element: <LoginPage />,
+  },
+  {
+    path: '/',
+    element: (
+      <RequireAuth>
+        <AppLayout />
+      </RequireAuth>
+    ),
+    children: [
+      { index: true, element: <Navigate to="/campaigns" replace /> },
+      { path: 'campaigns', element: <CampaignsPage /> },
+    ],
+  },
+  {
+    path: '*',
+    element: <Navigate to="/" replace />,
+  },
+]);
