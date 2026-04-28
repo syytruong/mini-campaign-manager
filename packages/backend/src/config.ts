@@ -9,6 +9,8 @@ interface AppConfig {
   port: number;
   databaseUrl: string;
   corsOrigins: string[];
+  jwtSecret: string;
+  jwtExpiresIn: string;
 }
 
 function required(name: string): string {
@@ -27,7 +29,6 @@ function parseCorsOrigins(): string[] {
       .map((s) => s.trim())
       .filter(Boolean);
   }
-  // Sensible default for local dev: Vite default port
   return ['http://localhost:5173'];
 }
 
@@ -36,4 +37,6 @@ export const config: AppConfig = {
   port: Number(process.env.API_PORT) || 4000,
   databaseUrl: required('DATABASE_URL'),
   corsOrigins: parseCorsOrigins(),
+  jwtSecret: required('JWT_SECRET'),
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
 };
