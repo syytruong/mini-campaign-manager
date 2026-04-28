@@ -1,9 +1,17 @@
+import cors from 'cors';
 import express, { type Express, type Request, type Response } from 'express';
+import { config } from './config';
 import { pingDatabase } from './db';
 
 export function createApp(): Express {
   const app = express();
 
+  app.use(
+    cors({
+      origin: config.corsOrigins,
+      credentials: true,
+    }),
+  );
   app.use(express.json());
 
   app.get('/health', async (_req: Request, res: Response) => {
