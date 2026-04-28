@@ -1,3 +1,5 @@
+import './models';
+
 import { createApp } from './app';
 import { config } from './config';
 import { pingDatabase, sequelize } from './db';
