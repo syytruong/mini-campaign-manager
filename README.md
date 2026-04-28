@@ -13,25 +13,70 @@ A simplified MarTech tool that lets marketers create, manage, and track email ca
 ```
 campaign-manager/
 ├── packages/
-│   ├── backend/    # Express API
-│   └── frontend/   # React app (Vite)
+│   ├── backend/    # Express API (coming next)
+│   └── frontend/   # React app (coming next)
 ├── docker-compose.yml
+├── .env.example
 └── package.json    # workspace root
 ```
 
-## Quick start
+## Local setup
 
-> Setup instructions will be filled in as the project comes together. See the per-package READMEs once they exist.
+### Prerequisites
+
+- Node.js 20+ (use `nvm use` to pick up `.nvmrc`)
+- Yarn 1.22+
+- Docker + Docker Compose
+
+### 1. Clone and configure
 
 ```bash
-# Prereqs: Node 20+, Yarn 1.22+, Docker
+git clone <repo-url>
+cd mini-campaign-manager
+cp .env.example .env
+# Edit .env — at minimum, set a real JWT_SECRET
+```
+
+### 2. Start the database
+
+```bash
+docker compose up -d db
+```
+
+Verify it's healthy:
+
+```bash
+docker compose ps
+# db should show "healthy"
+```
+
+### 3. Install dependencies
+
+```bash
 nvm use
 yarn install
+```
+
+> Note: `yarn install` will warn that there are no workspace packages yet — that's expected until steps 3 and 4 add the backend and frontend.
+
+### Stopping everything
+
+```bash
+docker compose down           # stops containers, keeps the volume
+docker compose down -v        # also removes the db volume (fresh start)
 ```
 
 ## Status
 
 Work in progress. Building this incrementally — each commit is a small, reviewable slice.
+
+| Step | Slice | Status |
+|------|-------|--------|
+| 1 | Monorepo init | ✅ |
+| 2 | Docker Compose (Postgres) | ✅ |
+| 3 | Backend scaffold | ⏳ |
+| 4 | Frontend scaffold | ⏳ |
+| 5+ | Feature slices | ⏳ |
 
 ## License
 
