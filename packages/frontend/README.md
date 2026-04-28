@@ -56,6 +56,7 @@ src/
 ├── api/
 │   ├── client.ts           # typed fetch wrapper, error envelope, 401 auto-logout
 │   ├── auth.ts             # /auth/register, /auth/login
+│   ├── campaigns.ts        # /campaigns endpoints + useCampaignsList hook
 │   └── queryClient.ts      # React Query default config
 ├── store/
 │   └── authStore.ts        # Zustand store with persist middleware
@@ -63,18 +64,38 @@ src/
 │   ├── index.tsx           # createBrowserRouter config
 │   └── RequireAuth.tsx     # redirect-to-/login guard
 ├── components/
-│   └── AppLayout.tsx       # top bar + Outlet for protected pages
+│   ├── AppLayout.tsx       # top bar + Outlet for protected pages
+│   ├── EmptyState.tsx      # reusable empty placeholder
+│   ├── ErrorAlert.tsx      # reusable Chakra Alert renderer for ApiError
+│   └── StatusBadge.tsx     # color-mapped Badge for CampaignStatus
 └── pages/
     ├── LoginPage.tsx       # /login (sign-in + register tabs)
-    └── CampaignsPage.tsx   # /campaigns (placeholder for now)
+    └── CampaignsPage.tsx   # /campaigns (list with filter + pagination)
 ```
 
 ## Routes
 
-| Path         | Auth | Description                                    |
-|--------------|------|------------------------------------------------|
-| `/login`     | -    | Sign in or create an account                   |
-| `/campaigns` | JWT  | (placeholder, populated in the next slice)     |
+| Path             | Auth | Description                               |
+|------------------|------|-------------------------------------------|
+| `/login`         | -    | Sign in or create an account              |
+| `/campaigns`     | JWT  | List campaigns with status filter         |
+
+URL search params on `/campaigns`:
+- `?status=` — `draft|scheduled|sending|sent` to filter
+- `?page=` — 1-indexed page number (defaults to 1)
+
+These live in URL state so filters are deep-linkable and survive refresh.
+
+## Status colors
+
+| Status      | Color  |
+|-------------|--------|
+| `draft`     | grey   |
+| `scheduled` | blue   |
+| `sending`   | orange |
+| `sent`      | green  |
+
+Defined once in `components/StatusBadge.tsx`.
 
 ## Errors
 

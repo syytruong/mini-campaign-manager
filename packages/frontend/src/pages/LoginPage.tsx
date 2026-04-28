@@ -1,10 +1,6 @@
 import { useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import {
-  Alert,
-  AlertDescription,
-  AlertIcon,
-  AlertTitle,
   Box,
   Button,
   Container,
@@ -22,8 +18,8 @@ import {
   Text,
 } from '@chakra-ui/react';
 import { useMutation } from '@tanstack/react-query';
-import { ApiError } from '../api/client';
 import { authApi, type LoginPayload, type RegisterPayload } from '../api/auth';
+import { ErrorAlert } from '../components/ErrorAlert';
 import { useAuthStore, useIsAuthenticated } from '../store/authStore';
 
 interface LocationState {
@@ -195,20 +191,5 @@ function RegisterForm({ redirectTo }: FormProps) {
         </Button>
       </Stack>
     </form>
-  );
-}
-
-function ErrorAlert({ error }: { error: unknown }) {
-  const apiErr = error instanceof ApiError ? error : null;
-  return (
-    <Alert status="error" borderRadius="md">
-      <AlertIcon />
-      <Box flex="1">
-        <AlertTitle fontSize="sm">{apiErr?.code ?? 'Error'}</AlertTitle>
-        <AlertDescription fontSize="sm">
-          {apiErr?.message ?? (error instanceof Error ? error.message : 'Unknown error')}
-        </AlertDescription>
-      </Box>
-    </Alert>
   );
 }
