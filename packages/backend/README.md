@@ -8,7 +8,7 @@ Run from the monorepo root:
 
 ```bash
 yarn backend dev        # tsx watch mode
-yarn backend build      # compile to dist/
+yarn backend build      # tsc -p tsconfig.build.json
 yarn backend start      # run compiled output
 yarn backend migrate    # apply pending SQL migrations
 yarn backend test       # jest (uses TEST_DATABASE_URL if set)
@@ -40,12 +40,12 @@ Tests truncate tables between runs, so use a separate test database:
 
 ```bash
 docker exec campaign_manager_db psql -U postgres -c "CREATE DATABASE campaign_manager_test;"
-TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/campaign_manager_test \
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/campaign_manager_test \
   yarn backend migrate
 yarn backend test
 ```
 
-The `TEST_DATABASE_URL` env var (in the root `.env`) is picked up by jest via
+`TEST_DATABASE_URL` (in the root `.env`) is picked up by jest via
 `src/test/setup.ts` and swaps `DATABASE_URL` before any model code runs.
 
 ## Endpoints
@@ -55,8 +55,19 @@ The `TEST_DATABASE_URL` env var (in the root `.env`) is picked up by jest via
 | GET    | `/health`        | -    | Service + database connectivity check |
 | POST   | `/auth/register` | -    | Register a new user                   |
 | POST   | `/auth/login`    | -    | Login, returns JWT                    |
+| GET    | `/recipients`    | JWT  | List recipients (paginated)           |
+| POST   | `/recipients`    | JWT  | Create or upsert a recipient by email |
 
-More endpoints coming in subsequent commits.
+### Pagination
+
+List endpoints accept `?limit=` (max 100, default 20) and `?offset=` (default 0).
+Responses include a `pagination` object with `total`, `limit`, `offset`, `hasMore`.
+The total count is also returned in the `X-Total-Count` header (exposed via CORS).
+
+### POST /recipients
+
+Idempotent — POSTing an email that already exists returns the existing record
+with status `200 OK`. New recipients return `201 Created`.
 
 ## Env vars
 
@@ -74,22 +85,23 @@ Loaded from the monorepo root `.env` file. Required:
 
 ```
 src/
-├── app.ts              # Express app factory (testable)
-├── config.ts           # env loader with required-var validation
-├── db.ts               # Sequelize instance + healthcheck
-├── index.ts            # server entrypoint (boot + graceful shutdown)
-├── migrate.ts          # SQL migration runner
+├── app.ts                  # Express app factory (testable)
+├── config.ts               # env loader with required-var validation
+├── db.ts                   # Sequelize instance + healthcheck
+├── index.ts                # server entrypoint (boot + graceful shutdown)
+├── migrate.ts              # SQL migration runner
 ├── errors/
-│   └── AppError.ts     # domain errors with statusCode + code
+│   └── AppError.ts         # domain errors with statusCode + code
 ├── middleware/
-│   ├── errorHandler.ts # central HTTP error renderer
-│   └── requireAuth.ts  # JWT verification, attaches typed req.user
-├── models/             # Sequelize models + association graph
-├── routes/             # thin Express routers — call services
-├── services/           # business logic, no Express imports
+│   ├── errorHandler.ts     # central HTTP error renderer
+│   ├── pagination.ts       # shared pagination Zod schema
+│   └── requireAuth.ts      # JWT verification, attaches typed req.user
+├── models/                 # Sequelize models + association graph
+├── routes/                 # thin Express routers — call services
+├── services/               # business logic, no Express imports
 └── test/
-    ├── helpers.ts      # resetDatabase, closeDatabase
-    └── setup.ts        # jest globalSetup — swaps DB URL for tests
+    ├── helpers.ts          # resetDatabase, closeDatabase
+    └── setup.ts            # jest globalSetup — swaps DB URL for tests
 ```
 
 The boundary between routes and services is enforced by convention: services

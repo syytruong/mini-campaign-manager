@@ -4,6 +4,7 @@ import { config } from './config';
 import { pingDatabase } from './db';
 import { errorHandler } from './middleware/errorHandler';
 import { authRouter } from './routes/auth';
+import { recipientsRouter } from './routes/recipients';
 
 export function createApp(): Express {
   const app = express();
@@ -12,6 +13,7 @@ export function createApp(): Express {
     cors({
       origin: config.corsOrigins,
       credentials: true,
+      exposedHeaders: ['X-Total-Count'],
     }),
   );
   app.use(express.json());
@@ -37,6 +39,7 @@ export function createApp(): Express {
   });
 
   app.use('/auth', authRouter);
+  app.use('/recipients', recipientsRouter);
 
   // 404 for unknown routes — must come BEFORE the error handler.
   app.use((_req, res) => {
@@ -45,6 +48,7 @@ export function createApp(): Express {
     });
   });
 
+  // Error handler — must be LAST.
   app.use(errorHandler);
 
   return app;
