@@ -50,13 +50,18 @@ yarn backend test
 
 ## Endpoints
 
-| Method | Path             | Auth | Description                           |
-|--------|------------------|------|---------------------------------------|
-| GET    | `/health`        | -    | Service + database connectivity check |
-| POST   | `/auth/register` | -    | Register a new user                   |
-| POST   | `/auth/login`    | -    | Login, returns JWT                    |
-| GET    | `/recipients`    | JWT  | List recipients (paginated)           |
-| POST   | `/recipients`    | JWT  | Create or upsert a recipient by email |
+| Method | Path                  | Auth | Description                                          |
+|--------|-----------------------|------|------------------------------------------------------|
+| GET    | `/health`             | -    | Service + database connectivity check                |
+| POST   | `/auth/register`      | -    | Register a new user                                  |
+| POST   | `/auth/login`         | -    | Login, returns JWT                                   |
+| GET    | `/recipients`         | JWT  | List recipients (paginated)                          |
+| POST   | `/recipients`         | JWT  | Create or upsert a recipient by email                |
+| GET    | `/campaigns`          | JWT  | List the user's campaigns (paginated, filter status) |
+| POST   | `/campaigns`          | JWT  | Create a draft campaign with optional recipients     |
+| GET    | `/campaigns/:id`      | JWT  | Campaign detail with attached recipients             |
+| PATCH  | `/campaigns/:id`      | JWT  | Update a draft (403 otherwise)                       |
+| DELETE | `/campaigns/:id`      | JWT  | Delete a draft (403 otherwise)                       |
 
 ### Pagination
 
@@ -68,6 +73,19 @@ The total count is also returned in the `X-Total-Count` header (exposed via CORS
 
 Idempotent — POSTing an email that already exists returns the existing record
 with status `200 OK`. New recipients return `201 Created`.
+
+### Campaign status guards
+
+Campaigns move through `draft → scheduled → sending → sent`. Once a campaign
+leaves `draft`, attempts to PATCH or DELETE return `403 Forbidden`. Status
+transitions happen via dedicated endpoints (`/schedule`, `/send` — coming next),
+not through PATCH.
+
+### Ownership scope
+
+A user only sees their own campaigns. Requests for someone else's campaign
+return `404 Not Found` (not `403`) — we don't leak the existence of
+out-of-scope resources.
 
 ## Env vars
 
