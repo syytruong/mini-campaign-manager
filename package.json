@@ -1,0 +1,23 @@
+{
+  "name": "campaign-manager",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Mini Campaign Manager — full-stack MarTech tool",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "backend": "yarn workspace @campaign-manager/backend",
+    "frontend": "yarn workspace @campaign-manager/frontend",
+    "dev": "yarn workspaces foreach -pi run dev",
+    "build": "yarn workspaces foreach -t run build",
+    "test": "yarn workspaces foreach run test",
+    "lint": "yarn workspaces foreach run lint"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "yarn": ">=1.22.0"
+  },
+  "packageManager": "yarn@1.22.22",
+  "license": "MIT"
+}
