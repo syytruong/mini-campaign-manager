@@ -9,4 +9,5 @@ module.exports = {
   coverageDirectory: 'coverage',
   clearMocks: true,
   verbose: true,
+  setupFiles: ['<rootDir>/src/test/setup.ts'],
 };

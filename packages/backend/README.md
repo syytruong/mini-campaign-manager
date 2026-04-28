@@ -11,7 +11,7 @@ yarn backend dev        # tsx watch mode
 yarn backend build      # compile to dist/
 yarn backend start      # run compiled output
 yarn backend migrate    # apply pending SQL migrations
-yarn backend test       # jest
+yarn backend test       # jest (uses TEST_DATABASE_URL if set)
 yarn backend lint       # eslint
 ```
 
@@ -34,11 +34,27 @@ docker compose up -d db
 yarn backend migrate
 ```
 
+### Tests
+
+Tests truncate tables between runs, so use a separate test database:
+
+```bash
+docker exec campaign_manager_db psql -U postgres -c "CREATE DATABASE campaign_manager_test;"
+TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/campaign_manager_test \
+  yarn backend migrate
+yarn backend test
+```
+
+The `TEST_DATABASE_URL` env var (in the root `.env`) is picked up by jest via
+`src/test/setup.ts` and swaps `DATABASE_URL` before any model code runs.
+
 ## Endpoints
 
-| Method | Path      | Auth | Description                                |
-|--------|-----------|------|--------------------------------------------|
-| GET    | `/health` | -    | Service + database connectivity check      |
+| Method | Path             | Auth | Description                           |
+|--------|------------------|------|---------------------------------------|
+| GET    | `/health`        | -    | Service + database connectivity check |
+| POST   | `/auth/register` | -    | Register a new user                   |
+| POST   | `/auth/login`    | -    | Login, returns JWT                    |
 
 More endpoints coming in subsequent commits.
 
@@ -47,6 +63,35 @@ More endpoints coming in subsequent commits.
 Loaded from the monorepo root `.env` file. Required:
 
 - `DATABASE_URL` — full Postgres connection string
+- `JWT_SECRET` — used to sign and verify JWTs (use a long random string)
 - `API_PORT` — defaults to 4000
 - `NODE_ENV` — defaults to `development`
+- `JWT_EXPIRES_IN` — defaults to `7d`
 - `CORS_ORIGINS` — comma-separated allowlist (defaults to `http://localhost:5173`)
+- `TEST_DATABASE_URL` — optional, used by jest
+
+## Architecture notes
+
+```
+src/
+├── app.ts              # Express app factory (testable)
+├── config.ts           # env loader with required-var validation
+├── db.ts               # Sequelize instance + healthcheck
+├── index.ts            # server entrypoint (boot + graceful shutdown)
+├── migrate.ts          # SQL migration runner
+├── errors/
+│   └── AppError.ts     # domain errors with statusCode + code
+├── middleware/
+│   ├── errorHandler.ts # central HTTP error renderer
+│   └── requireAuth.ts  # JWT verification, attaches typed req.user
+├── models/             # Sequelize models + association graph
+├── routes/             # thin Express routers — call services
+├── services/           # business logic, no Express imports
+└── test/
+    ├── helpers.ts      # resetDatabase, closeDatabase
+    └── setup.ts        # jest globalSetup — swaps DB URL for tests
+```
+
+The boundary between routes and services is enforced by convention: services
+throw `AppError`, routes catch nothing and pass errors to `next()`. The
+`errorHandler` middleware renders every error consistently.
