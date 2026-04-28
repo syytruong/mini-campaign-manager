@@ -4,6 +4,7 @@ import { config } from './config';
 import { pingDatabase } from './db';
 import { errorHandler } from './middleware/errorHandler';
 import { authRouter } from './routes/auth';
+import { campaignsRouter } from './routes/campaigns';
 import { recipientsRouter } from './routes/recipients';
 
 export function createApp(): Express {
@@ -40,6 +41,7 @@ export function createApp(): Express {
 
   app.use('/auth', authRouter);
   app.use('/recipients', recipientsRouter);
+  app.use('/campaigns', campaignsRouter);
 
   // 404 for unknown routes — must come BEFORE the error handler.
   app.use((_req, res) => {
