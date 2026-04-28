@@ -29,6 +29,10 @@ const listQuerySchema = paginationSchema.extend({
   status: z.enum(CAMPAIGN_STATUSES).optional(),
 });
 
+const scheduleSchema = z.object({
+  scheduledAt: z.coerce.date(),
+});
+
 router.use(requireAuth);
 
 router.get('/', async (req, res, next) => {
@@ -85,7 +89,27 @@ router.delete('/:id', async (req, res, next) => {
   }
 });
 
-// Reject other methods on /:id with a clean 405-style message via the global handler
+router.post('/:id/schedule', async (req, res, next) => {
+  try {
+    const userId = req.user!.id;
+    const { scheduledAt } = scheduleSchema.parse(req.body);
+    const campaign = await campaignService.schedule(req.params.id, userId, scheduledAt);
+    res.json(campaign);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/:id/send', async (req, res, next) => {
+  try {
+    const userId = req.user!.id;
+    const campaign = await campaignService.startSending(req.params.id, userId);
+    res.status(202).json(campaign);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.all('/:id', (_req, _res, next) => {
   next(Errors.badRequest('Method not allowed for this resource'));
 });
