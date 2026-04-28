@@ -31,8 +31,8 @@ pnpm-debug.log*
 Thumbs.db
 .idea/
 .vscode/*
+!.vscode/settings.json
 !.vscode/extensions.json
-!.vscode/settings.json.example
 
 # Test / coverage
 coverage/
