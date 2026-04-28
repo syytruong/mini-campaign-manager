@@ -64,6 +64,7 @@ yarn backend test
 | DELETE | `/campaigns/:id`           | JWT  | Delete a draft (403 otherwise)                       |
 | POST   | `/campaigns/:id/schedule`  | JWT  | Schedule for a future timestamp                      |
 | POST   | `/campaigns/:id/send`      | JWT  | Kick off async sending (202 Accepted)                |
+| GET    | `/campaigns/:id/stats`     | JWT  | Aggregated delivery stats                            |
 
 ### State machine
 
@@ -90,6 +91,27 @@ Accepted`. The actual per-recipient outcome runs in the background:
 This is an in-process simulation. A production system would use a job queue
 (BullMQ, SQS, etc.) so jobs survive restarts. The simulation lives in
 `campaignService.runSendSimulation`.
+
+### Stats
+
+```json
+GET /campaigns/:id/stats
+{
+  "total":     100,
+  "sent":       82,
+  "failed":     18,
+  "opened":     31,
+  "open_rate":  0.378,
+  "send_rate":  0.82
+}
+```
+
+- `open_rate` is `opened / sent` (you can't open what wasn't sent)
+- `send_rate` is `sent / total` (% of intended recipients who got it)
+- Rates are 0..1 numbers — frontend multiplies by 100 for display
+- Single `GROUP BY` query, uses the `(campaign_id, status)` composite index
+- `opened_at` is read but not yet written to (forward-compatible for a future
+  open-tracking endpoint)
 
 ### Pagination
 

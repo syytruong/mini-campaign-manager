@@ -1,4 +1,4 @@
-import { Transaction } from 'sequelize';
+import { QueryTypes, Transaction } from 'sequelize';
 import { sequelize } from '../db';
 import { Errors } from '../errors/AppError';
 import {
@@ -34,12 +34,15 @@ export interface ListCampaignsResult {
   total: number;
 }
 
-/**
- * Single source of truth for the state machine.
- *   from -> [allowed next states]
- *
- * Used by every status-changing operation.
- */
+export interface CampaignStats {
+  total: number;
+  sent: number;
+  failed: number;
+  opened: number;
+  open_rate: number;
+  send_rate: number;
+}
+
 const TRANSITIONS: Record<CampaignStatus, CampaignStatus[]> = {
   draft: ['scheduled', 'sending'],
   scheduled: ['sending'],
@@ -53,10 +56,6 @@ function assertCanTransition(from: CampaignStatus, to: CampaignStatus): void {
   }
 }
 
-/**
- * Internal helper: fetch a campaign that belongs to userId.
- * Returns 404 (not 403) when the campaign exists but isn't theirs.
- */
 async function findCampaignForUser(
   id: string,
   userId: string,
@@ -79,17 +78,12 @@ function assertEditable(campaign: Campaign): void {
   }
 }
 
-// 15% failure rate: realistic enough to demo, low enough to avoid "everything failed"
 const FAILURE_RATE = 0.15;
 
 function rollOutcome(): 'sent' | 'failed' {
   return Math.random() < FAILURE_RATE ? 'failed' : 'sent';
 }
 
-/**
- * The actual async simulation. Detached from the request that triggered it.
- * Each recipient row is updated individually with a per-row outcome and timestamp.
- */
 async function runSendSimulation(campaignId: string): Promise<void> {
   try {
     const deliveries = await CampaignRecipient.findAll({
@@ -104,10 +98,24 @@ async function runSendSimulation(campaignId: string): Promise<void> {
 
     await Campaign.update({ status: 'sent' }, { where: { id: campaignId } });
   } catch (err) {
-    // Don't crash the process. In a real system this would log to an
-    // error tracker and the campaign would be retried by a background worker.
     console.error(`[send] simulation failed for campaign ${campaignId}:`, err);
   }
+}
+
+/**
+ * Round to 4 decimal places (so 0.1234 not 0.12345678).
+ * Returned as a number 0..1 — the frontend multiplies by 100 for display.
+ */
+function rate(numerator: number, denominator: number): number {
+  if (denominator === 0) return 0;
+  return Math.round((numerator / denominator) * 10000) / 10000;
+}
+
+interface StatsRow {
+  total: string;
+  sent: string;
+  failed: string;
+  opened: string;
 }
 
 export const campaignService = {
@@ -195,7 +203,6 @@ export const campaignService = {
   },
 
   async schedule(id: string, userId: string, scheduledAt: Date): Promise<Campaign> {
-    // 1-second grace window for in-flight requests
     if (scheduledAt.getTime() < Date.now() - 1000) {
       throw Errors.badRequest('scheduledAt must be a future timestamp');
     }
@@ -211,10 +218,6 @@ export const campaignService = {
     });
   },
 
-  /**
-   * Mark the campaign as 'sending' and kick off the async simulation.
-   * Returns immediately — caller responds with 202 Accepted.
-   */
   async startSending(id: string, userId: string): Promise<Campaign> {
     const campaign = await sequelize.transaction(async (tx) => {
       const c = await findCampaignForUser(id, userId, tx);
@@ -224,12 +227,54 @@ export const campaignService = {
       return c;
     });
 
-    // Kick off the simulation outside the transaction. setImmediate yields
-    // control back to the event loop so the HTTP response goes out first.
     setImmediate(() => {
       void runSendSimulation(campaign.id);
     });
 
     return campaign;
+  },
+
+  /**
+   * Aggregated delivery stats for a campaign.
+   * Single GROUP BY query, uses the composite index on (campaign_id, status).
+   *
+   * - open_rate uses sent as denominator (you can't open an email that wasn't sent)
+   * - send_rate uses total as denominator (% of intended recipients who got it)
+   * - rates are 0..1 numbers; frontend multiplies by 100 for display
+   */
+  async getStats(id: string, userId: string): Promise<CampaignStats> {
+    // Ensure the campaign exists AND belongs to this user — 404 otherwise
+    await findCampaignForUser(id, userId);
+
+    const rows = await sequelize.query<StatsRow>(
+      `
+      SELECT
+        COUNT(*)::text                                                AS total,
+        COUNT(*) FILTER (WHERE status = 'sent')::text                 AS sent,
+        COUNT(*) FILTER (WHERE status = 'failed')::text               AS failed,
+        COUNT(*) FILTER (WHERE opened_at IS NOT NULL)::text           AS opened
+      FROM campaign_recipients
+      WHERE campaign_id = :campaignId
+      `,
+      {
+        type: QueryTypes.SELECT,
+        replacements: { campaignId: id },
+      },
+    );
+
+    const row = rows[0];
+    const total = Number(row?.total ?? 0);
+    const sent = Number(row?.sent ?? 0);
+    const failed = Number(row?.failed ?? 0);
+    const opened = Number(row?.opened ?? 0);
+
+    return {
+      total,
+      sent,
+      failed,
+      opened,
+      open_rate: rate(opened, sent),
+      send_rate: rate(sent, total),
+    };
   },
 };
