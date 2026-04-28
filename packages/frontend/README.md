@@ -56,7 +56,7 @@ src/
 ├── api/
 │   ├── client.ts           # typed fetch wrapper, error envelope, 401 auto-logout
 │   ├── auth.ts             # /auth/register, /auth/login
-│   ├── campaigns.ts        # /campaigns endpoints + useCampaignsList hook
+│   ├── campaigns.ts        # campaigns endpoints + React Query hooks
 │   └── queryClient.ts      # React Query default config
 ├── store/
 │   └── authStore.ts        # Zustand store with persist middleware
@@ -65,13 +65,17 @@ src/
 │   └── RequireAuth.tsx     # redirect-to-/login guard
 ├── components/
 │   ├── AppLayout.tsx       # top bar + Outlet for protected pages
+│   ├── ConfirmDialog.tsx   # destructive-action confirmations
 │   ├── EmptyState.tsx      # reusable empty placeholder
 │   ├── ErrorAlert.tsx      # reusable Chakra Alert renderer for ApiError
+│   ├── ScheduleModal.tsx   # datetime picker for scheduling
+│   ├── StatsPanel.tsx      # stat counts + send/open rate progress bars
 │   └── StatusBadge.tsx     # color-mapped Badge for CampaignStatus
 ├── pages/
 │   ├── LoginPage.tsx       # /login (sign-in + register tabs)
 │   ├── CampaignsPage.tsx   # /campaigns (list with filter + pagination)
-│   └── NewCampaignPage.tsx # /campaigns/new (create form)
+│   ├── NewCampaignPage.tsx # /campaigns/new (create form)
+│   └── CampaignDetailPage.tsx # /campaigns/:id (detail + actions)
 └── utils/
     └── parseEmails.ts      # textarea -> {valid, invalid} email arrays
 ```
@@ -83,12 +87,11 @@ src/
 | `/login`         | -    | Sign in or create an account              |
 | `/campaigns`     | JWT  | List campaigns with status filter         |
 | `/campaigns/new` | JWT  | Create a draft campaign                   |
+| `/campaigns/:id` | JWT  | Detail page with stats and actions        |
 
 URL search params on `/campaigns`:
 - `?status=` — `draft|scheduled|sending|sent` to filter
 - `?page=` — 1-indexed page number (defaults to 1)
-
-These live in URL state so filters are deep-linkable and survive refresh.
 
 ## Status colors
 
@@ -101,9 +104,25 @@ These live in URL state so filters are deep-linkable and survive refresh.
 
 Defined once in `components/StatusBadge.tsx`.
 
+## Action visibility on `/campaigns/:id`
+
+| Status      | Schedule | Send | Delete |
+|-------------|:--------:|:----:|:------:|
+| `draft`     | ✓        | ✓    | ✓      |
+| `scheduled` |          | ✓    |        |
+| `sending`   |          |      |        |
+| `sent`      |          |      |        |
+
+When status is `sending`, the page polls `/campaigns/:id` and `/campaigns/:id/stats`
+every 2 seconds so the user sees the simulation finish in near-real-time.
+
 ## Errors
 
 API errors are rendered as Chakra `Alert` components showing the backend's
 `error.code` and `error.message`. The error envelope from the backend matches
 the shape the API client expects — every error in the system surfaces with
 the same UX.
+
+A 404 on the detail page renders a friendly "Campaign not found" message
+instead of a raw error alert — matches the backend's "not yours = not found"
+ownership scope.

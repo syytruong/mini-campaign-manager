@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AppLayout } from '../components/AppLayout';
+import { CampaignDetailPage } from '../pages/CampaignDetailPage';
 import { CampaignsPage } from '../pages/CampaignsPage';
 import { LoginPage } from '../pages/LoginPage';
 import { NewCampaignPage } from '../pages/NewCampaignPage';
@@ -21,6 +22,7 @@ export const router = createBrowserRouter([
       { index: true, element: <Navigate to="/campaigns" replace /> },
       { path: 'campaigns', element: <CampaignsPage /> },
       { path: 'campaigns/new', element: <NewCampaignPage /> },
+      { path: 'campaigns/:id', element: <CampaignDetailPage /> },
     ],
   },
   {
