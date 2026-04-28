@@ -110,6 +110,16 @@ router.post('/:id/send', async (req, res, next) => {
   }
 });
 
+router.get('/:id/stats', async (req, res, next) => {
+  try {
+    const userId = req.user!.id;
+    const stats = await campaignService.getStats(req.params.id, userId);
+    res.json(stats);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.all('/:id', (_req, _res, next) => {
   next(Errors.badRequest('Method not allowed for this resource'));
 });
