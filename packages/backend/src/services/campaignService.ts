@@ -43,6 +43,12 @@ export interface CampaignStats {
   send_rate: number;
 }
 
+export interface AddRecipientsResult {
+  added: number;
+  skipped: number;
+  total: number;
+}
+
 const TRANSITIONS: Record<CampaignStatus, CampaignStatus[]> = {
   draft: ['scheduled', 'sending'],
   scheduled: ['sending'],
@@ -70,10 +76,28 @@ async function findCampaignForUser(
   return campaign;
 }
 
+/**
+ * Editable in the strict sense: name/subject/body can change.
+ * Only drafts qualify.
+ */
 function assertEditable(campaign: Campaign): void {
   if (campaign.status !== 'draft') {
     throw Errors.forbidden(
       `Cannot modify a campaign with status '${campaign.status}'. Only drafts are editable.`,
+    );
+  }
+}
+
+/**
+ * Recipient-editable: membership can be added or removed.
+ * Drafts AND scheduled campaigns qualify — a scheduled campaign hasn't
+ * gone out yet, so changing the audience is still meaningful.
+ * Once 'sending' or 'sent', the audience is locked.
+ */
+function assertRecipientEditable(campaign: Campaign): void {
+  if (campaign.status !== 'draft' && campaign.status !== 'scheduled') {
+    throw Errors.forbidden(
+      `Cannot change recipients on a campaign with status '${campaign.status}'.`,
     );
   }
 }
@@ -214,6 +238,92 @@ export const campaignService = {
     await campaign.destroy();
   },
 
+  /**
+   * Attach one or more recipients to an existing campaign.
+   *
+   * Allowed on draft and scheduled. Emails are findOrCreated, then bulk-
+   * attached with ignoreDuplicates so re-adding an existing recipient is
+   * a no-op rather than an error. Returns counts so the caller knows how
+   * many were actually attached vs. already present.
+   */
+  async addRecipients(
+    id: string,
+    userId: string,
+    emails: string[],
+  ): Promise<AddRecipientsResult> {
+    const trimmedEmails = Array.from(
+      new Set(emails.map((e) => e.trim().toLowerCase()).filter(Boolean)),
+    );
+    if (trimmedEmails.length === 0) {
+      throw Errors.badRequest('At least one email is required');
+    }
+
+    return sequelize.transaction(async (tx) => {
+      const campaign = await findCampaignForUser(id, userId, tx);
+      assertRecipientEditable(campaign);
+
+      // Snapshot existing membership so we can report a useful "skipped" count.
+      const before = await CampaignRecipient.count({
+        where: { campaignId: id },
+        transaction: tx,
+      });
+
+      const attachments: Array<{ campaignId: string; recipientId: string }> = [];
+      for (const email of trimmedEmails) {
+        const { recipient } = await recipientService.findOrCreate({ email });
+        attachments.push({ campaignId: id, recipientId: recipient.id });
+      }
+      await CampaignRecipient.bulkCreate(attachments, {
+        transaction: tx,
+        ignoreDuplicates: true,
+      });
+
+      const after = await CampaignRecipient.count({
+        where: { campaignId: id },
+        transaction: tx,
+      });
+
+      const added = after - before;
+      return {
+        added,
+        skipped: trimmedEmails.length - added,
+        total: after,
+      };
+    });
+  },
+
+  /**
+   * Remove a single recipient from a campaign.
+   *
+   * Allowed on draft and scheduled — never once the campaign has reached
+   * 'sending' or 'sent' (audience is locked).
+   *
+   * Defensive per-row check: even if the status check were ever loosened,
+   * a CampaignRecipient row with sent_at IS NOT NULL means the email has
+   * already gone out, and removing it would falsify our audit trail. So
+   * we refuse regardless of the campaign status.
+   */
+  async removeRecipient(id: string, userId: string, recipientId: string): Promise<void> {
+    await sequelize.transaction(async (tx) => {
+      const campaign = await findCampaignForUser(id, userId, tx);
+      assertRecipientEditable(campaign);
+
+      const delivery = await CampaignRecipient.findOne({
+        where: { campaignId: id, recipientId },
+        transaction: tx,
+      });
+      if (!delivery) throw Errors.notFound('Recipient is not on this campaign');
+
+      if (delivery.sentAt !== null) {
+        throw Errors.forbidden(
+          'Cannot remove a recipient that has already received this campaign',
+        );
+      }
+
+      await delivery.destroy({ transaction: tx });
+    });
+  },
+
   async schedule(id: string, userId: string, scheduledAt: Date): Promise<Campaign> {
     if (scheduledAt.getTime() < Date.now() - 1000) {
       throw Errors.badRequest('scheduledAt must be a future timestamp');
@@ -234,6 +344,15 @@ export const campaignService = {
     const campaign = await sequelize.transaction(async (tx) => {
       const c = await findCampaignForUser(id, userId, tx);
       assertCanTransition(c.status, 'sending');
+
+      const recipientCount = await CampaignRecipient.count({
+        where: { campaignId: id },
+        transaction: tx,
+      });
+      if (recipientCount === 0) {
+        throw Errors.badRequest('Cannot send a campaign with no recipients');
+      }
+
       c.status = 'sending';
       await c.save({ transaction: tx });
       return c;

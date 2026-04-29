@@ -33,6 +33,10 @@ const scheduleSchema = z.object({
   scheduledAt: z.coerce.date(),
 });
 
+const addRecipientsSchema = z.object({
+  emails: z.array(z.string().email()).min(1).max(10000),
+});
+
 router.use(requireAuth);
 
 router.get('/', async (req, res, next) => {
@@ -115,6 +119,27 @@ router.get('/:id/stats', async (req, res, next) => {
     const userId = req.user!.id;
     const stats = await campaignService.getStats(req.params.id, userId);
     res.json(stats);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/:id/recipients', async (req, res, next) => {
+  try {
+    const userId = req.user!.id;
+    const { emails } = addRecipientsSchema.parse(req.body);
+    const result = await campaignService.addRecipients(req.params.id, userId, emails);
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/:id/recipients/:recipientId', async (req, res, next) => {
+  try {
+    const userId = req.user!.id;
+    await campaignService.removeRecipient(req.params.id, userId, req.params.recipientId);
+    res.status(204).end();
   } catch (err) {
     next(err);
   }

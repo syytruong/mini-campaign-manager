@@ -48,7 +48,6 @@ describe('campaignService', () => {
           subject: 'X',
           body: 'X',
         });
-        // Force the status by direct save — bypassing the (future) state-machine endpoints.
         c.status = status;
         await c.save();
 
@@ -90,7 +89,6 @@ describe('campaignService', () => {
         body: '...',
       });
 
-      // Bob sees 404, not 403 — we don't leak existence of other users' campaigns.
       const get = campaignService.getById(aliceDraft.id, bobId);
       const update = campaignService.update(aliceDraft.id, bobId, { name: 'pwned' });
       const remove = campaignService.remove(aliceDraft.id, bobId);
@@ -99,7 +97,6 @@ describe('campaignService', () => {
       await expect(update).rejects.toMatchObject({ statusCode: 404, code: 'NOT_FOUND' });
       await expect(remove).rejects.toMatchObject({ statusCode: 404, code: 'NOT_FOUND' });
 
-      // And the draft is unchanged.
       const fresh = await Campaign.findByPk(aliceDraft.id);
       expect(fresh?.name).toBe('Alice only');
     });
@@ -120,6 +117,29 @@ describe('campaignService', () => {
         'bob@example.com',
         'carol@example.com',
       ]);
+    });
+  });
+
+  describe('send guard: cannot broadcast to nobody', () => {
+    it('throws 400 BAD_REQUEST when starting to send a campaign with zero recipients', async () => {
+      const userId = await makeUser('marketer@example.com');
+      const empty = await campaignService.create(userId, {
+        name: 'Empty Campaign',
+        subject: 'Subject',
+        body: 'Body',
+        // no recipientEmails
+      });
+
+      const attempt = campaignService.startSending(empty.id, userId);
+
+      await expect(attempt).rejects.toBeInstanceOf(AppError);
+      await expect(attempt).rejects.toMatchObject({
+        statusCode: 400,
+        code: 'BAD_REQUEST',
+      });
+
+      const fresh = await Campaign.findByPk(empty.id);
+      expect(fresh?.status).toBe('draft');
     });
   });
 });
