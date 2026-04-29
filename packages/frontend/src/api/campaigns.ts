@@ -14,6 +14,12 @@ export interface ListCampaignsParams {
   status?: CampaignStatus;
 }
 
+export interface AddRecipientsResult {
+  added: number;
+  skipped: number;
+  total: number;
+}
+
 export const campaignsApi = {
   list: (params: ListCampaignsParams) =>
     apiRequest<Paginated<Campaign>>('/campaigns', {
@@ -62,6 +68,17 @@ export const campaignsApi = {
   send: (id: string) =>
     apiRequest<Campaign>(`/campaigns/${id}/send`, {
       method: 'POST',
+    }),
+
+  addRecipients: (id: string, emails: string[]) =>
+    apiRequest<AddRecipientsResult>(`/campaigns/${id}/recipients`, {
+      method: 'POST',
+      body: { emails },
+    }),
+
+  removeRecipient: (id: string, recipientId: string) =>
+    apiRequest<void>(`/campaigns/${id}/recipients/${recipientId}`, {
+      method: 'DELETE',
     }),
 };
 
