@@ -9,6 +9,7 @@ import {
   Flex,
   Heading,
   HStack,
+  IconButton,
   Spacer,
   Spinner,
   Stack,
@@ -19,18 +20,28 @@ import {
   Text,
   Th,
   Thead,
+  Tooltip,
   Tr,
 } from '@chakra-ui/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '../api/client';
 import { campaignKeys, campaignsApi, useCampaign, useCampaignStats } from '../api/campaigns';
+import { AddRecipientsModal } from '../components/AddRecipientModal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { EmptyState } from '../components/EmptyState';
 import { ErrorAlert } from '../components/ErrorAlert';
 import { ScheduleModal } from '../components/ScheduleModal';
 import { StatsPanel } from '../components/StatsPanel';
 import { StatusBadge } from '../components/StatusBadge';
+import type { Recipient } from '../types';
 
-type DialogState = 'closed' | 'schedule' | 'send' | 'delete';
+type DialogState =
+  | { kind: 'closed' }
+  | { kind: 'schedule' }
+  | { kind: 'send' }
+  | { kind: 'delete' }
+  | { kind: 'addRecipients' }
+  | { kind: 'removeRecipient'; recipient: Recipient };
 
 export function CampaignDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -40,8 +51,8 @@ export function CampaignDetailPage() {
   const campaignQuery = useCampaign(id);
   const statsQuery = useCampaignStats(id, campaignQuery.data?.status);
 
-  const [dialog, setDialog] = useState<DialogState>('closed');
-  const close = (): void => setDialog('closed');
+  const [dialog, setDialog] = useState<DialogState>({ kind: 'closed' });
+  const close = (): void => setDialog({ kind: 'closed' });
 
   const invalidateAll = (): void => {
     queryClient.invalidateQueries({ queryKey: campaignKeys.all });
@@ -72,6 +83,22 @@ export function CampaignDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: campaignKeys.all });
       navigate('/campaigns', { replace: true });
+    },
+  });
+
+  const addRecipientsMutation = useMutation({
+    mutationFn: (emails: string[]) => campaignsApi.addRecipients(id!, emails),
+    onSuccess: () => {
+      invalidateAll();
+      close();
+    },
+  });
+
+  const removeRecipientMutation = useMutation({
+    mutationFn: (recipientId: string) => campaignsApi.removeRecipient(id!, recipientId),
+    onSuccess: () => {
+      invalidateAll();
+      close();
     },
   });
 
@@ -107,11 +134,16 @@ export function CampaignDetailPage() {
 
   const campaign = campaignQuery.data!;
   const status = campaign.status;
+  const recipientCount = campaign.recipients.length;
 
   // Action visibility per status
   const canSchedule = status === 'draft';
   const canSend = status === 'draft' || status === 'scheduled';
   const canDelete = status === 'draft';
+  const canEditRecipients = status === 'draft' || status === 'scheduled';
+
+  const sendDisabledReason =
+    recipientCount === 0 ? 'Add at least one recipient before sending.' : undefined;
 
   return (
     <Stack spacing={6}>
@@ -137,17 +169,26 @@ export function CampaignDetailPage() {
         <Spacer />
         <ButtonGroup>
           {canSchedule && (
-            <Button onClick={() => setDialog('schedule')} variant="outline">
+            <Button onClick={() => setDialog({ kind: 'schedule' })} variant="outline">
               Schedule
             </Button>
           )}
           {canSend && (
-            <Button colorScheme="blue" onClick={() => setDialog('send')}>
-              Send now
-            </Button>
+            <Tooltip label={sendDisabledReason} isDisabled={!sendDisabledReason} hasArrow>
+              {/* Tooltip needs a wrapper around a disabled button */}
+              <Box>
+                <Button
+                  colorScheme="blue"
+                  onClick={() => setDialog({ kind: 'send' })}
+                  isDisabled={recipientCount === 0}
+                >
+                  Send now
+                </Button>
+              </Box>
+            </Tooltip>
           )}
           {canDelete && (
-            <Button colorScheme="red" variant="ghost" onClick={() => setDialog('delete')}>
+            <Button colorScheme="red" variant="ghost" onClick={() => setDialog({ kind: 'delete' })}>
               Delete
             </Button>
           )}
@@ -169,16 +210,41 @@ export function CampaignDetailPage() {
 
       {/* Recipients */}
       <Box bg="white" borderWidth="1px" borderRadius="md" p={5}>
-        <HStack mb={3}>
-          <Heading size="sm">Recipients</Heading>
-          <Text fontSize="sm" color="gray.500">
-            ({campaign.recipients.length})
-          </Text>
-        </HStack>
-        {campaign.recipients.length === 0 ? (
-          <Text color="gray.500" fontSize="sm">
-            No recipients on this campaign.
-          </Text>
+        <Flex mb={3} align="center">
+          <HStack>
+            <Heading size="sm">Recipients</Heading>
+            <Text fontSize="sm" color="gray.500">
+              ({recipientCount})
+            </Text>
+          </HStack>
+          <Spacer />
+          {canEditRecipients && recipientCount > 0 && (
+            <Button size="sm" onClick={() => setDialog({ kind: 'addRecipients' })}>
+              Add recipients
+            </Button>
+          )}
+        </Flex>
+
+        {recipientCount === 0 ? (
+          <EmptyState
+            title="No recipients yet"
+            description={
+              canEditRecipients
+                ? 'Add at least one recipient before you can send this campaign.'
+                : 'This campaign has no recipients.'
+            }
+            action={
+              canEditRecipients && (
+                <Button
+                  colorScheme="blue"
+                  mt={2}
+                  onClick={() => setDialog({ kind: 'addRecipients' })}
+                >
+                  Add recipients
+                </Button>
+              )
+            }
+          />
         ) : (
           <TableContainer borderWidth="1px" borderRadius="md">
             <Table size="sm">
@@ -187,6 +253,7 @@ export function CampaignDetailPage() {
                   <Th>Email</Th>
                   <Th>Name</Th>
                   <Th>Added</Th>
+                  {canEditRecipients && <Th aria-label="Actions" w="1" />}
                 </Tr>
               </Thead>
               <Tbody>
@@ -199,6 +266,18 @@ export function CampaignDetailPage() {
                     <Td color="gray.600" fontSize="sm">
                       {new Date(r.createdAt).toLocaleDateString()}
                     </Td>
+                    {canEditRecipients && (
+                      <Td>
+                        <IconButton
+                          aria-label={`Remove ${r.email}`}
+                          size="xs"
+                          variant="ghost"
+                          colorScheme="red"
+                          icon={<span aria-hidden>×</span>}
+                          onClick={() => setDialog({ kind: 'removeRecipient', recipient: r })}
+                        />
+                      </Td>
+                    )}
                   </Tr>
                 ))}
               </Tbody>
@@ -216,7 +295,7 @@ export function CampaignDetailPage() {
 
       {/* Dialogs */}
       <ScheduleModal
-        isOpen={dialog === 'schedule'}
+        isOpen={dialog.kind === 'schedule'}
         onClose={() => {
           scheduleMutation.reset();
           close();
@@ -227,7 +306,7 @@ export function CampaignDetailPage() {
       />
 
       <ConfirmDialog
-        isOpen={dialog === 'send'}
+        isOpen={dialog.kind === 'send'}
         onClose={() => {
           sendMutation.reset();
           close();
@@ -236,9 +315,9 @@ export function CampaignDetailPage() {
         title="Send this campaign?"
         description={
           <>
-            This will start sending to <strong>{campaign.recipients.length}</strong> recipient
-            {campaign.recipients.length === 1 ? '' : 's'}. Once sent, the campaign cannot be edited
-            or sent again.
+            This will start sending to <strong>{recipientCount}</strong> recipient
+            {recipientCount === 1 ? '' : 's'}. Once sent, the campaign cannot be edited or sent
+            again.
           </>
         }
         confirmLabel="Send now"
@@ -248,7 +327,7 @@ export function CampaignDetailPage() {
       />
 
       <ConfirmDialog
-        isOpen={dialog === 'delete'}
+        isOpen={dialog.kind === 'delete'}
         onClose={() => {
           deleteMutation.reset();
           close();
@@ -263,6 +342,40 @@ export function CampaignDetailPage() {
         confirmLabel="Delete"
         isSubmitting={deleteMutation.isPending}
         error={deleteMutation.error}
+      />
+
+      <AddRecipientsModal
+        isOpen={dialog.kind === 'addRecipients'}
+        onClose={() => {
+          addRecipientsMutation.reset();
+          close();
+        }}
+        onConfirm={(emails) => addRecipientsMutation.mutate(emails)}
+        isSubmitting={addRecipientsMutation.isPending}
+        error={addRecipientsMutation.error}
+      />
+
+      <ConfirmDialog
+        isOpen={dialog.kind === 'removeRecipient'}
+        onClose={() => {
+          removeRecipientMutation.reset();
+          close();
+        }}
+        onConfirm={() => {
+          if (dialog.kind !== 'removeRecipient') return;
+          removeRecipientMutation.mutate(dialog.recipient.id);
+        }}
+        title="Remove this recipient?"
+        description={
+          dialog.kind === 'removeRecipient' ? (
+            <>
+              <strong>{dialog.recipient.email}</strong> will no longer receive this campaign.
+            </>
+          ) : null
+        }
+        confirmLabel="Remove"
+        isSubmitting={removeRecipientMutation.isPending}
+        error={removeRecipientMutation.error}
       />
     </Stack>
   );
