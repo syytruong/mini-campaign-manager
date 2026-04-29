@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { authLimiter, registerLimiter } from '../middleware/rateLimit';
 import { authService } from '../services/authService';
 
 const router = Router();
@@ -15,7 +16,7 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
-router.post('/register', async (req, res, next) => {
+router.post('/register', registerLimiter, async (req, res, next) => {
   try {
     const input = registerSchema.parse(req.body);
     const result = await authService.register(input);
@@ -25,7 +26,7 @@ router.post('/register', async (req, res, next) => {
   }
 });
 
-router.post('/login', async (req, res, next) => {
+router.post('/login', authLimiter, async (req, res, next) => {
   try {
     const input = loginSchema.parse(req.body);
     const result = await authService.login(input);

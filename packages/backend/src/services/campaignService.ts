@@ -84,6 +84,22 @@ function rollOutcome(): 'sent' | 'failed' {
   return Math.random() < FAILURE_RATE ? 'failed' : 'sent';
 }
 
+/**
+ * Async send simulation.
+ *
+ * Takes a campaignId (NOT a closure over the request), so swapping this
+ * for a real queue handler (BullMQ, SQS) is a one-file change: replace
+ * `setImmediate(() => runSendSimulation(id))` with `queue.add({ id })`.
+ *
+ * KNOWN LIMITATION — process crash mid-send:
+ * If Node crashes between flipping the campaign to 'sending' and finishing
+ * the loop below, the campaign is permanently stuck in 'sending' with no
+ * recovery path. In production this is solved by a queue with at-least-once
+ * delivery + a stuck-job watchdog. We deliberately do NOT add a startup
+ * recovery routine here, because faking queue semantics would suggest the
+ * system is more robust than it is. For this demo the gap is named, not
+ * patched.
+ */
 async function runSendSimulation(campaignId: string): Promise<void> {
   try {
     const deliveries = await CampaignRecipient.findAll({
@@ -102,10 +118,6 @@ async function runSendSimulation(campaignId: string): Promise<void> {
   }
 }
 
-/**
- * Round to 4 decimal places (so 0.1234 not 0.12345678).
- * Returned as a number 0..1 — the frontend multiplies by 100 for display.
- */
 function rate(numerator: number, denominator: number): number {
   if (denominator === 0) return 0;
   return Math.round((numerator / denominator) * 10000) / 10000;
@@ -204,7 +216,7 @@ export const campaignService = {
 
   async schedule(id: string, userId: string, scheduledAt: Date): Promise<Campaign> {
     if (scheduledAt.getTime() < Date.now() - 1000) {
-      throw Errors.badRequest('Schedule must be in future');
+      throw Errors.badRequest('scheduledAt must be a future timestamp');
     }
 
     return sequelize.transaction(async (tx) => {
@@ -234,16 +246,7 @@ export const campaignService = {
     return campaign;
   },
 
-  /**
-   * Aggregated delivery stats for a campaign.
-   * Single GROUP BY query, uses the composite index on (campaign_id, status).
-   *
-   * - open_rate uses sent as denominator (you can't open an email that wasn't sent)
-   * - send_rate uses total as denominator (% of intended recipients who got it)
-   * - rates are 0..1 numbers; frontend multiplies by 100 for display
-   */
   async getStats(id: string, userId: string): Promise<CampaignStats> {
-    // Ensure the campaign exists AND belongs to this user — 404 otherwise
     await findCampaignForUser(id, userId);
 
     const rows = await sequelize.query<StatsRow>(
